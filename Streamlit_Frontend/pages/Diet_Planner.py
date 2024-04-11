@@ -4,6 +4,7 @@ from Generate_Recommendations import Generator
 from random import uniform as rnd
 from ImageFinder import get_images_links as find_image
 from streamlit_echarts import st_echarts
+from auth import create_user_data, authenticate
 
 st.set_page_config(page_title="Automatic Diet Recommendation", page_icon="💪",layout="wide")
 
@@ -18,6 +19,45 @@ sys.path.append(str(current_file_dir.parent))
 
 from ImageFinder import get_images_links as find_image
 from Generate_Recommendations import Generator
+
+user_data = {}
+
+# Initialize user_data in session state if it doesn't exist
+if 'user_data' not in st.session_state:
+    st.session_state.user_data = {}
+
+def authenticate_user():
+    menu = ["Login", "SignUp"]
+    choice = st.sidebar.selectbox("Menu", menu)
+
+    user_data = st.session_state.user_data
+       
+    if choice == "Login":
+        st.subheader("Login Section")
+        username = st.sidebar.text_input("User Name")  
+        password = st.sidebar.text_input("Password", type='password')
+        if st.sidebar.checkbox("Login"):
+            if authenticate(username, password, user_data):
+                st.success("Logged In as {}".format(username))
+                return True
+            else:
+                st.error("Invalid username or password")
+                return False
+
+    elif choice == "SignUp":
+        st.subheader("Create New Account")
+        new_username = st.text_input("User Name")
+        new_password = st.text_input("Password", type='password')
+        if st.button("Signup"):
+            if new_username not in user_data.keys():
+                user_data[new_username] = create_user_data(new_username, new_password)
+                st.success("Account created successfully!")
+                return True
+            else:
+                st.error("Username already exists")
+                return False
+
+    return False
 
 
 nutritions_values=['Calories','FatContent','SaturatedFatContent','CholesterolContent','SodiumContent','CarbohydrateContent','FiberContent','SugarContent','ProteinContent']
@@ -98,8 +138,16 @@ class Display:
         self.plans=["Maintain weight","Mild weight loss","Weight loss","Extreme weight loss"]
         self.weights=[1,0.9,0.8,0.6]
         self.losses=['-0 kg/week','-0.25 kg/week','-0.5 kg/week','-1 kg/week']
+        self.diseases = [
+            "Coeliac disease", "Hypothyroidism", "Hyperthyroidism", "Diabetes insipidus", "Frozen Shoulder", "Trigger Finger",
+            "Haemochromatosis", "Acute Pancreatitis", "Chronic Pancreatitis", "Nausea and vomiting", "Migraine", "Mononucleosis",
+            "Stomach aches", "Conjunctivitis", "Dry Mouth", "Acne", "Malnutrition", "Diabetes", "Kidney Infection",
+            "Obstructive Sleep Apnea", "Thyroid", "Scleroderma", "Acromegaly", "Phoechromocytoma", "Lupus", "Cushing Syndrome",
+            "Hypertension", "Type 2 Diabetes", "High blood pressure", "Heart Disease", "Stroke", "Sleep apnea", "Metabolic syndrome",
+            "Fatty liver disease", "Osteoarthritis", "Gallbladder diseases", "Kidney Diseases", "Measles", "Mouth Ulcer",
+            "Sore Throat", "Yellow Fever"
+        ]
         pass
-
     def display_bmi(self,person):
         st.header('BMI CALCULATOR')
         bmi_string,category,color = person.display_result()
@@ -251,8 +299,8 @@ class Display:
         st_echarts(options=nutritions_graph_options, height="500px",)
         
 
-display=Display()
-title="<h1 style='text-align: center;'>Automatic Diet Recommendation</h1>"
+display = Display()
+title = "<h1 style='text-align: center;'>Automatic Diet Recommendation</h1>"
 st.markdown(title, unsafe_allow_html=True)
 with st.form("recommendation_form"):
     st.write("Modify the values and click the Generate button to use")
@@ -263,27 +311,35 @@ with st.form("recommendation_form"):
     activity = st.select_slider('Activity',options=['Little/no exercise', 'Light exercise', 'Moderate exercise (3-5 days/wk)', 'Very active (6-7 days/wk)', 
     'Extra active (very active & physical job)'])
     option = st.selectbox('Choose your weight loss plan:',display.plans)
-    st.session_state.weight_loss_option=option
-    weight_loss=display.weights[display.plans.index(option)]
-    number_of_meals=st.slider('Meals per day',min_value=3,max_value=5,step=1,value=3)
-    if number_of_meals==3:
-        meals_calories_perc={'breakfast':0.35,'lunch':0.40,'dinner':0.25}
-    elif number_of_meals==4:
-        meals_calories_perc={'breakfast':0.30,'morning snack':0.05,'lunch':0.40,'dinner':0.25}
+    st.session_state.weight_loss_option = option
+    weight_loss = display.weights[display.plans.index(option)]
+    number_of_meals = st.slider('Meals per day',min_value=3,max_value=5,step=1,value=3)
+    if number_of_meals == 3:
+        meals_calories_perc = {'breakfast':0.35,'lunch':0.40,'dinner':0.25}
+    elif number_of_meals == 4:
+        meals_calories_perc = {'breakfast':0.30,'morning snack':0.05,'lunch':0.40,'dinner':0.25}
     else:
-        meals_calories_perc={'breakfast':0.30,'morning snack':0.05,'lunch':0.40,'afternoon snack':0.05,'dinner':0.20}
+        meals_calories_perc = {'breakfast':0.30,'morning snack':0.05,'lunch':0.40,'afternoon snack':0.05,'dinner':0.20}
+    diseases = st.multiselect('Choose your disease:', display.diseases)
+    
+    
     generated = st.form_submit_button("Generate")
-if generated:
-    st.session_state.generated=True
-    person = Person(age,height,weight,gender,activity,meals_calories_perc,weight_loss)
-    with st.container():
-        display.display_bmi(person)
-    with st.container():
-        display.display_calories(person)
-    with st.spinner('Generating recommendations...'):     
-        recommendations=person.generate_recommendations()
-        st.session_state.recommendations=recommendations
-        st.session_state.person=person
+
+# Call the authentication function
+if not authenticate_user():
+    st.warning("Please log in or sign up to continue.")
+else:
+    if generated:
+        st.session_state.generated = True
+        person = Person(age, height, weight, gender, activity, meals_calories_perc, weight_loss)
+        with st.container():
+            display.display_bmi(person)
+        with st.container():
+            display.display_calories(person)
+        with st.spinner('Generating recommendations...'):     
+            recommendations = person.generate_recommendations()
+            st.session_state.recommendations = recommendations
+            st.session_state.person = person
 
 if st.session_state.generated:
     with st.container():
